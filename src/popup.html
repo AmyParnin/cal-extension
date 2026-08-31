@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Smart Calendar</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      width: 320px;
+      font-family: "Google Sans", Roboto, sans-serif;
+      font-size: 14px;
+      color: #202124;
+      background: #fff;
+      padding: 16px;
+    }
+
+    h1 {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    label {
+      display: block;
+      font-size: 12px;
+      color: #5f6368;
+      margin-bottom: 4px;
+      margin-top: 10px;
+    }
+
+    input, textarea {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid #dadce0;
+      border-radius: 6px;
+      font-size: 14px;
+      font-family: inherit;
+    }
+
+    textarea {
+      height: 72px;
+      resize: vertical;
+    }
+
+    #ai-hint {
+      font-size: 11px;
+      color: #5f6368;
+      margin-top: 4px;
+    }
+
+    #parse-btn {
+      margin-top: 8px;
+      width: 100%;
+      padding: 8px;
+      background: #f1f3f4;
+      border: 1px solid #dadce0;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+
+    #parse-btn:hover { background: #e8eaed; }
+
+    hr { margin: 14px 0; border: none; border-top: 1px solid #f1f3f4; }
+
+    .allday-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .allday-row input[type="checkbox"] {
+      width: auto;
+      padding: 0;
+      margin: 0;
+      cursor: pointer;
+    }
+
+    .allday-row label {
+      margin: 0;
+      font-size: 13px;
+      color: #202124;
+      cursor: pointer;
+    }
+
+    #create-btn {
+      width: 100%;
+      padding: 10px;
+      background: #1a73e8;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      margin-top: 12px;
+    }
+
+    #create-btn:disabled { background: #a8c7fa; cursor: default; }
+
+    #status-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 10px;
+      min-height: 28px;
+    }
+
+    #status {
+      font-size: 12px;
+      flex: 1;
+    }
+
+    #open-btn {
+      display: none;
+      padding: 5px 10px;
+      background: #fff;
+      color: #1a73e8;
+      border: 1px solid #1a73e8;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    #open-btn:hover { background: #e8f0fe; }
+
+    .success { color: #1e8e3e; }
+    .error   { color: #d93025; }
+  </style>
+</head>
+<body>
+  <h1>📅 Smart Calendar</h1>
+
+  <!-- Natural language input -->
+  <label for="nl-input">Describe your event</label>
+  <textarea id="nl-input" placeholder="e.g. Lunch with Sarah next Tuesday at noon for 1 hour at Tartine Bakery"></textarea>
+  <div id="ai-hint">✨ Describe it naturally — AI will fill in the details</div>
+  <button id="parse-btn">✦ Parse with AI</button>
+
+  <hr />
+
+  <!-- Editable fields (pre-filled by AI or manually entered) -->
+  <label for="title">Title</label>
+  <input id="title" type="text" placeholder="Event title" />
+
+  <!-- All-day toggle -->
+  <div class="allday-row">
+    <input id="allday" type="checkbox" />
+    <label for="allday">All-day event</label>
+  </div>
+
+  <!-- Timed event fields -->
+  <div id="timed-fields">
+    <label for="datetime">Date &amp; Time</label>
+    <input id="datetime" type="datetime-local" />
+
+    <label for="duration">Duration (minutes)</label>
+    <input id="duration" type="number" value="60" min="5" step="5" />
+  </div>
+
+  <!-- All-day event fields (hidden until checkbox is checked) -->
+  <div id="allday-fields" style="display:none">
+    <label for="startdate">Start Date</label>
+    <input id="startdate" type="date" />
+
+    <label for="enddate">End Date</label>
+    <input id="enddate" type="date" />
+  </div>
+
+  <label for="location">Location (optional)</label>
+  <input id="location" type="text" placeholder="Address or video link" />
+
+  <label for="description">Notes (optional)</label>
+  <input id="description" type="text" placeholder="Extra details" />
+
+  <button id="create-btn">Add to Google Calendar</button>
+
+  <div id="status-row">
+    <span id="status"></span>
+    <button id="open-btn">Open in Calendar ↗</button>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
