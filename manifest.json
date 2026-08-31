@@ -2,7 +2,8 @@
   "manifest_version": 3,
   "name": "Smart Calendar",
   "version": "1.0.0",
-  "description": "Create Google Calendar events intelligently from any webpage",
+  "description": "Create Google Calendar events from any webpage — select text or describe your event in plain English.",
+  "homepage_url": "https://github.com/AmyParnin/cal-extension",
 
   "permissions": [
     "contextMenus",
