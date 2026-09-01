@@ -136,6 +136,10 @@ function extractDateInfo(text) {
   } else if (h24Match) {
     hour   = parseInt(h24Match[1]);
     minute = parseInt(h24Match[2]);
+  } else if (/\bnoon\b/.test(lower)) {
+    hour = 12; minute = 0;
+  } else if (/\bmidnight\b/.test(lower)) {
+    hour = 0; minute = 0;
   }
 
   const hasTime = hour !== null;
@@ -150,25 +154,14 @@ function extractDateInfo(text) {
     date.setDate(now.getDate() + 1);
   }
 
-  // Named weekday: "Monday", "next Tuesday"
-  if (!date) {
-    const DAYS = ["sunday","monday","tuesday","wednesday","thursday","friday","saturday"];
-    const dayMatch = lower.match(/\b(next\s+)?(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/);
-    if (dayMatch) {
-      const target  = DAYS.indexOf(dayMatch[2]);
-      let daysAhead = target - now.getDay();
-      if (daysAhead <= 0 || dayMatch[1]) daysAhead += 7;
-      date = new Date(now);
-      date.setDate(now.getDate() + daysAhead);
-    }
-  }
-
-  // Month-name date: "June 15", "Jun 15", "Oct 1, 2026", "October 1 2026"
+  // Month-name date — checked BEFORE weekday so "Thursday, October 1" picks
+  // up October 1 rather than "next Thursday".
+  // Handles: "June 15", "Jun 15", "Sept. 15", "Oct 1, 2026", "October 1 2026"
   if (!date) {
     const MONTHS = ["january","february","march","april","may","june",
                     "july","august","september","october","november","december"];
     const mMatch = lower.match(
-      /\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+(\d{1,2})(?:st|nd|rd|th)?(?:[,\s]+(\d{4}))?\b/
+      /\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\.?\s+(\d{1,2})(?:st|nd|rd|th)?(?:[,\s]+(\d{4}))?\b/
     );
     if (mMatch) {
       const abbr = mMatch[1];
@@ -212,6 +205,22 @@ function extractDateInfo(text) {
       if (m >= 0 && m <= 11 && d >= 1 && d <= 31) {
         date = new Date(y, m, d);
       }
+    }
+  }
+
+  // Named weekday — full or abbreviated: "Monday", "Mon", "next Tue", "Thursday"
+  if (!date) {
+    const DAYS = ["sunday","monday","tuesday","wednesday","thursday","friday","saturday"];
+    const dayMatch = lower.match(
+      /\b(next\s+)?(sun(?:day)?|mon(?:day)?|tue(?:s(?:day)?)?|wed(?:nesday)?|thu(?:r(?:s(?:day)?)?)?|fri(?:day)?|sat(?:urday)?)\b/
+    );
+    if (dayMatch) {
+      const abbr    = dayMatch[2];
+      const target  = DAYS.findIndex(d => d.startsWith(abbr));
+      let daysAhead = target - now.getDay();
+      if (daysAhead <= 0 || dayMatch[1]) daysAhead += 7;
+      date = new Date(now);
+      date.setDate(now.getDate() + daysAhead);
     }
   }
 
