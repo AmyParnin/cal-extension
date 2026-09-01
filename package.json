@@ -1,0 +1,27 @@
+{
+  "name": "cal-extension",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "jest"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AmyParnin/cal-extension.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/AmyParnin/cal-extension/issues"
+  },
+  "homepage": "https://github.com/AmyParnin/cal-extension#readme",
+  "devDependencies": {
+    "jest": "^30.5.1"
+  }
+}

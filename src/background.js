@@ -238,3 +238,8 @@ function toDateString(date) {
   const pad = (n) => String(n).padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
+
+// Allow unit testing in Node without the Chrome runtime
+if (typeof module !== "undefined") {
+  module.exports = { extractDateInfo, parseEventFromText };
+}
