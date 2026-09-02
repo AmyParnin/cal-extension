@@ -15,35 +15,41 @@
 </head>
 <body>
   <h1>Smart Calendar — Privacy Policy</h1>
-  <p class="updated">Last updated: August 2026</p>
+  <p class="updated">Last updated: September 2026</p>
 
-  <p>Smart Calendar is a Chrome extension that helps you create Google Calendar events from text on any webpage. This policy explains what data is accessed and how it is used.</p>
+  <p>Smart Calendar is a Chrome extension that helps you create Google Calendar events and Google Tasks from text on any webpage. This policy explains what data is accessed and how it is used.</p>
 
   <h2>Data we access</h2>
   <ul>
     <li><strong>Selected text</strong> — when you right-click and choose "Create Calendar event", the text you selected on the page is read and used to parse event details (title, date, time). This text is processed locally in your browser and is never sent to any external server by this extension.</li>
-    <li><strong>Google account (OAuth)</strong> — the extension requests a Google OAuth token via Chrome's built-in identity API (<code>chrome.identity</code>). This token is used solely to create events in your Google Calendar on your behalf. The token is never stored or transmitted to any server other than Google's Calendar API.</li>
-    <li><strong>Google Calendar</strong> — event data you enter (title, date, time, location, notes) is sent directly to the Google Calendar API (<code>https://www.googleapis.com/calendar/v3/</code>) to create your event. No copy of this data is retained by the extension.</li>
+    <li><strong>Google account (OAuth)</strong> — the extension requests a Google OAuth token via Chrome's built-in identity API (<code>chrome.identity</code>). This token is used solely to create events in your Google Calendar or tasks in Google Tasks on your behalf. The token is never stored or transmitted to any server other than Google's APIs.</li>
+    <li><strong>Google Calendar</strong> — when creating a calendar event, event data you enter (title, date, time, location, notes) is sent directly to the Google Calendar API (<code>https://www.googleapis.com/calendar/v3/</code>) to create your event. No copy of this data is retained by the extension.</li>
+    <li><strong>Google Tasks</strong> — when creating a task, task data you enter (title, due date, notes) is sent directly to the Google Tasks API (<code>https://tasks.googleapis.com/tasks/v1/</code>) to create your task. No copy of this data is retained by the extension.</li>
   </ul>
 
   <h2>Data we do NOT collect</h2>
   <ul>
     <li>We do not collect, store, or transmit any personal data to our own servers.</li>
     <li>We do not track browsing history or page content beyond the text you explicitly select.</li>
-    <li>We do not share any data with third parties (other than Google's Calendar API, as described above).</li>
+    <li>We do not share any data with third parties (other than Google's Calendar and Tasks APIs, as described above).</li>
     <li>We do not use analytics or crash-reporting services.</li>
   </ul>
 
   <h2>Permissions used</h2>
   <ul>
-    <li><strong>identity</strong> — to sign you in with Google and obtain a Calendar API access token.</li>
+    <li><strong>identity</strong> — to sign you in with Google and obtain Calendar and Tasks API access tokens.</li>
     <li><strong>contextMenus</strong> — to add the "Create Calendar event" option to the right-click menu.</li>
     <li><strong>storage</strong> — reserved for future local preferences (no personal data is stored today).</li>
-    <li><strong>host permissions (googleapis.com)</strong> — to call the Google Calendar API to create your event.</li>
+    <li><strong>host permissions (googleapis.com, tasks.googleapis.com)</strong> — to call the Google Calendar and Tasks APIs to create your events and tasks.</li>
   </ul>
 
   <h2>Third-party services</h2>
-  <p>The only third-party service this extension communicates with is the <a href="https://developers.google.com/calendar">Google Calendar API</a>, governed by <a href="https://policies.google.com/privacy">Google's Privacy Policy</a>.</p>
+  <p>This extension communicates with two Google APIs:</p>
+  <ul>
+    <li><a href="https://developers.google.com/calendar">Google Calendar API</a> — for creating calendar events</li>
+    <li><a href="https://developers.google.com/tasks">Google Tasks API</a> — for creating tasks</li>
+  </ul>
+  <p>Both are governed by <a href="https://policies.google.com/privacy">Google's Privacy Policy</a>.</p>
 
   <h2>Changes to this policy</h2>
   <p>If this policy changes materially, the updated version will be posted at this URL with a new "Last updated" date.</p>

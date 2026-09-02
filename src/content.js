@@ -5,11 +5,13 @@ let previewBubble = null;
 
 chrome.runtime.onMessage.addListener((message) => {
   if (message.type === "SHOW_EVENT_PREVIEW") {
-    showPreviewBubble(message.text, message.pageUrl, message.pageTitle);
+    // Capture selection HTML now, while it's still active, before the async parse
+    const notesText = getSelectionAsText();
+    showPreviewBubble(message.text, message.pageUrl, message.pageTitle, notesText);
   }
 });
 
-function showPreviewBubble(text, pageUrl, pageTitle) {
+function showPreviewBubble(text, pageUrl, pageTitle, notesText) {
   if (previewBubble) previewBubble.remove();
 
   chrome.runtime.sendMessage({ type: "PARSE_TEXT", text }, (response) => {
@@ -21,12 +23,12 @@ function showPreviewBubble(text, pageUrl, pageTitle) {
     const event = response.parsed;
     event.source = { title: pageTitle, url: pageUrl };
 
-    previewBubble = createBubble(event);
+    previewBubble = createBubble(event, notesText);
     document.body.appendChild(previewBubble);
   });
 }
 
-function createBubble(event) {
+function createBubble(event, notesText) {
   const bubble = document.createElement("div");
   bubble.id = "smart-cal-bubble";
 
@@ -51,6 +53,11 @@ function createBubble(event) {
   const datetimeVal = isAllDay ? "" : toDatetimeLocal(new Date(event.start.dateTime));
   const dateVal     = isAllDay ? event.start.date : "";
 
+  const initialMode = isAllDay ? "allday" : "timed";
+  const modeStyle = (m) => `flex:1;padding:6px 4px;border:none;border-right:1px solid #dadce0;cursor:pointer;font-size:12px;font-family:inherit;transition:background 0.1s;`;
+  const activeStyle = `background:#fde8e6;color:#c0394b;font-weight:600;`;
+  const inactiveStyle = `background:#fff;color:#5f6368;`;
+
   bubble.innerHTML = `
     <div style="font-weight:600;font-size:15px;margin-bottom:10px">📅 New Calendar Event</div>
 
@@ -58,9 +65,11 @@ function createBubble(event) {
     <input id="sc-title" value="${escHtml(event.summary)}"
       style="width:100%;box-sizing:border-box;padding:6px 8px;border:1px solid #dadce0;border-radius:6px;font-size:14px;margin-bottom:10px">
 
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-      <input id="sc-allday" type="checkbox" ${isAllDay ? "checked" : ""} style="cursor:pointer;margin:0">
-      <label for="sc-allday" style="font-size:13px;color:#202124;cursor:pointer;margin:0">All-day event</label>
+    <p style="font-size:11px;color:#5f6368;margin-bottom:4px">Type</p>
+    <div style="display:flex;border:1px solid #dadce0;border-radius:8px;overflow:hidden;margin-bottom:10px">
+      <button id="sc-mode-timed"  data-mode="timed"  style="${modeStyle()}${initialMode==='timed'  ? activeStyle : inactiveStyle}">⏰ Timed event</button>
+      <button id="sc-mode-allday" data-mode="allday" style="${modeStyle()}${initialMode==='allday' ? activeStyle : inactiveStyle}">📅 All-day</button>
+      <button id="sc-mode-task"   data-mode="task"   style="${modeStyle()}border-right:none;${initialMode==='task'   ? activeStyle : inactiveStyle}">✓ Task</button>
     </div>
 
     <div id="sc-timed" style="display:${isAllDay ? "none" : "block"}">
@@ -80,6 +89,19 @@ function createBubble(event) {
       <input id="sc-enddate" type="date" value="${dateVal}"
         style="width:100%;box-sizing:border-box;padding:6px 8px;border:1px solid #dadce0;border-radius:6px;font-size:14px;margin-bottom:10px">
     </div>
+
+    <div id="sc-task-fields" style="display:none">
+      <label style="display:block;margin-bottom:4px;font-size:12px;color:#5f6368">Due date</label>
+      <input id="sc-task-date" type="date"
+        style="width:100%;box-sizing:border-box;padding:6px 8px;border:1px solid #dadce0;border-radius:6px;font-size:14px;margin-bottom:8px">
+      <label style="display:block;margin-bottom:4px;font-size:12px;color:#5f6368">Due time (optional)</label>
+      <input id="sc-task-time" type="time"
+        style="width:100%;box-sizing:border-box;padding:6px 8px;border:1px solid #dadce0;border-radius:6px;font-size:14px;margin-bottom:10px">
+    </div>
+
+    <label style="display:block;margin-bottom:4px;font-size:12px;color:#5f6368">Notes</label>
+    <textarea id="sc-description" rows="3"
+      style="width:100%;box-sizing:border-box;padding:6px 8px;border:1px solid #dadce0;border-radius:6px;font-size:13px;font-family:inherit;resize:vertical;margin-bottom:10px"></textarea>
 
     <div style="display:flex;gap:8px">
       <button id="sc-confirm"
@@ -101,23 +123,53 @@ function createBubble(event) {
     </div>
   `;
 
-  // ── Wire up all-day toggle ───────────────────────────────────────────────────
-  const alldayEl   = bubble.querySelector("#sc-allday");
-  const timedDiv   = bubble.querySelector("#sc-timed");
-  const alldayDiv  = bubble.querySelector("#sc-allday-fields");
-  const dtInput    = bubble.querySelector("#sc-datetime");
-  const startInput = bubble.querySelector("#sc-startdate");
-  const endInput   = bubble.querySelector("#sc-enddate");
+  // ── Pre-fill notes with selected text (set via .value, not innerHTML, for safety)
+  const descEl = bubble.querySelector("#sc-description");
+  descEl.value = notesText || "";
 
-  alldayEl.addEventListener("change", () => {
-    const allDay = alldayEl.checked;
-    timedDiv.style.display  = allDay ? "none" : "block";
-    alldayDiv.style.display = allDay ? "block" : "none";
-    if (allDay && dtInput.value) {
-      const d = dtInput.value.slice(0, 10);
-      startInput.value = d;
-      endInput.value   = d;
+  // ── Mode selector ─────────────────────────────────────────────────────────────
+  const timedDiv     = bubble.querySelector("#sc-timed");
+  const alldayDiv    = bubble.querySelector("#sc-allday-fields");
+  const taskDiv      = bubble.querySelector("#sc-task-fields");
+  const dtInput      = bubble.querySelector("#sc-datetime");
+  const startInput   = bubble.querySelector("#sc-startdate");
+  const endInput     = bubble.querySelector("#sc-enddate");
+  const taskDateInp  = bubble.querySelector("#sc-task-date");
+  const taskTimeInp  = bubble.querySelector("#sc-task-time");
+  const confirmBtn   = bubble.querySelector("#sc-confirm");
+
+  let currentMode = initialMode;
+
+  function setBubbleMode(mode) {
+    currentMode = mode;
+    bubble.querySelectorAll("[data-mode]").forEach((btn) => {
+      const active = btn.dataset.mode === mode;
+      btn.style.background   = active ? "#fde8e6" : "#fff";
+      btn.style.color        = active ? "#c0394b" : "#5f6368";
+      btn.style.fontWeight   = active ? "600"     : "normal";
+    });
+    timedDiv.style.display  = mode === "timed"  ? "block" : "none";
+    alldayDiv.style.display = mode === "allday" ? "block" : "none";
+    taskDiv.style.display   = mode === "task"   ? "block" : "none";
+    confirmBtn.textContent  = mode === "task"   ? "Add to Google Tasks" : "Add to Calendar";
+
+    if (mode === "task") {
+      if (!taskDateInp.value) {
+        taskDateInp.value = dtInput.value ? dtInput.value.slice(0, 10) : startInput.value;
+      }
+      if (!taskTimeInp.value && dtInput.value) {
+        taskTimeInp.value = dtInput.value.slice(11, 16);
+      }
     }
+    if (mode === "allday" && dtInput.value) {
+      const d = dtInput.value.slice(0, 10);
+      if (!startInput.value) startInput.value = d;
+      if (!endInput.value)   endInput.value   = d;
+    }
+  }
+
+  bubble.querySelectorAll("[data-mode]").forEach((btn) => {
+    btn.addEventListener("click", () => setBubbleMode(btn.dataset.mode));
   });
 
   startInput.addEventListener("change", () => {
@@ -131,20 +183,55 @@ function createBubble(event) {
 
   // ── Confirm / create ─────────────────────────────────────────────────────────
   bubble.querySelector("#sc-confirm").addEventListener("click", () => {
-    const title    = bubble.querySelector("#sc-title").value.trim();
-    const allDay   = alldayEl.checked;
-    const statusEl = bubble.querySelector("#sc-status");
-    const openBtnEl = bubble.querySelector("#sc-open");
-    const tz       = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const title       = bubble.querySelector("#sc-title").value.trim();
+    const description = descEl.value.trim() || undefined;
+    const statusEl    = bubble.querySelector("#sc-status");
+    const openBtnEl   = bubble.querySelector("#sc-open");
+    const tz          = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
+    statusEl.style.color = "#5f6368";
+
+    if (currentMode === "task") {
+      const due = taskTimeInp.value
+        ? new Date(`${taskDateInp.value}T${taskTimeInp.value}:00`).toISOString()
+        : new Date(`${taskDateInp.value}T00:00:00`).toISOString();
+
+      const task = {
+        title,
+        notes: description,
+        due,
+      };
+
+      statusEl.textContent = "Creating task…";
+      chrome.runtime.sendMessage({ type: "CREATE_TASK", task }, (res) => {
+        if (res?.success) {
+          statusEl.style.color = "#1e8e3e";
+          statusEl.textContent = "✓ Task created!";
+          const dismissTimer = setTimeout(() => bubble.remove(), 3000);
+          openBtnEl.textContent = "Open Tasks ↗";
+          openBtnEl.style.display = "";
+          openBtnEl.addEventListener("click", () => {
+            clearTimeout(dismissTimer);
+            chrome.runtime.sendMessage({ type: "OPEN_URL", url: "https://calendar.google.com/calendar/r/tasks" });
+            bubble.remove();
+          });
+        } else {
+          statusEl.style.color = "#d93025";
+          statusEl.textContent = "Error: " + (res?.error || "unknown");
+        }
+      });
+      return;
+    }
+
+    // Calendar event (timed or all-day)
     let finalEvent;
-
-    if (allDay) {
+    if (currentMode === "allday") {
       const startDate = startInput.value;
       const endDate   = addDays(endInput.value || startDate, 1);
       finalEvent = {
         ...event,
         summary: title,
+        description,
         start: { date: startDate },
         end:   { date: endDate },
       };
@@ -155,14 +242,13 @@ function createBubble(event) {
       finalEvent = {
         ...event,
         summary: title,
+        description,
         start: { dateTime: dt.toISOString(), timeZone: tz },
         end:   { dateTime: endDt.toISOString(), timeZone: tz },
       };
     }
 
     statusEl.textContent = "Creating event…";
-    statusEl.style.color = "#5f6368";
-
     chrome.runtime.sendMessage({ type: "CREATE_EVENT", event: finalEvent }, (res) => {
       if (res?.success) {
         statusEl.style.color = "#1e8e3e";
@@ -172,6 +258,7 @@ function createBubble(event) {
 
         const htmlLink = res.result?.htmlLink;
         if (htmlLink) {
+          openBtnEl.textContent = "Open in Calendar ↗";
           openBtnEl.style.display = "";
           openBtnEl.addEventListener("click", () => {
             clearTimeout(dismissTimer);
@@ -198,6 +285,22 @@ function escHtml(str) {
 function toDatetimeLocal(date) {
   const pad = (n) => String(n).padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+// Returns the current selection as plain text, converting <a> links to
+// "link text (url)" so the URL is preserved even in a plain-text notes field.
+function getSelectionAsText() {
+  const selection = window.getSelection();
+  if (!selection || !selection.rangeCount) return "";
+  const range = selection.getRangeAt(0);
+  const div = document.createElement("div");
+  div.appendChild(range.cloneContents());
+  div.querySelectorAll("a").forEach((a) => {
+    const href = a.href;
+    const linkText = a.textContent.trim();
+    a.replaceWith(linkText && linkText !== href ? `${linkText} (${href})` : href);
+  });
+  return div.textContent.trim();
 }
 
 // Adds `days` to a "YYYY-MM-DD" string, returns a new "YYYY-MM-DD" string.

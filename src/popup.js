@@ -3,32 +3,70 @@
 const nlInput        = document.getElementById("nl-input");
 const parseBtn       = document.getElementById("parse-btn");
 const titleInput     = document.getElementById("title");
-const alldayCheck    = document.getElementById("allday");
 const timedFields    = document.getElementById("timed-fields");
 const alldayFields   = document.getElementById("allday-fields");
+const taskFields     = document.getElementById("task-fields");
+const locationRow    = document.getElementById("location-row");
 const dtInput        = document.getElementById("datetime");
 const durInput       = document.getElementById("duration");
 const startdateInput = document.getElementById("startdate");
 const enddateInput   = document.getElementById("enddate");
+const taskDateInput  = document.getElementById("task-date");
+const taskTimeInput  = document.getElementById("task-time");
 const locInput       = document.getElementById("location");
 const descInput      = document.getElementById("description");
 const createBtn      = document.getElementById("create-btn");
 const statusEl       = document.getElementById("status");
 const openBtn        = document.getElementById("open-btn");
 
-// ─── All-day Toggle ───────────────────────────────────────────────────────────
+// ─── Mode Selector ────────────────────────────────────────────────────────────
 
-alldayCheck.addEventListener("change", () => {
-  const isAllDay = alldayCheck.checked;
-  timedFields.style.display  = isAllDay ? "none" : "";
-  alldayFields.style.display = isAllDay ? "" : "none";
+let currentMode = "timed"; // "timed" | "allday" | "task"
 
-  // Pre-populate start/end date from the datetime field if already set
-  if (isAllDay && dtInput.value) {
-    const d = dtInput.value.slice(0, 10); // "YYYY-MM-DD"
-    startdateInput.value = d;
-    enddateInput.value   = d;
+function setMode(mode) {
+  currentMode = mode;
+
+  // Update button active states
+  document.querySelectorAll(".mode-btn").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.mode === mode);
+  });
+
+  // Show/hide field sections
+  timedFields.style.display  = mode === "timed"  ? "" : "none";
+  alldayFields.style.display = mode === "allday" ? "" : "none";
+  taskFields.style.display   = mode === "task"   ? "" : "none";
+
+  // Tasks don't have a location in the Google Tasks API
+  locationRow.style.display = mode === "task" ? "none" : "";
+
+  // Update create button label
+  createBtn.textContent = mode === "task"
+    ? "Add to Google Tasks"
+    : "Add to Google Calendar";
+
+  // Pre-populate task date/time when switching into task mode.
+  // Prefer the timed datetime field; fall back to the all-day start date.
+  if (mode === "task") {
+    if (!taskDateInput.value) {
+      taskDateInput.value = dtInput.value
+        ? dtInput.value.slice(0, 10)
+        : startdateInput.value;
+    }
+    if (!taskTimeInput.value && dtInput.value) {
+      taskTimeInput.value = dtInput.value.slice(11, 16);
+    }
   }
+
+  // Pre-populate all-day dates from datetime when switching to allday
+  if (mode === "allday" && dtInput.value) {
+    const d = dtInput.value.slice(0, 10);
+    if (!startdateInput.value) startdateInput.value = d;
+    if (!enddateInput.value)   enddateInput.value   = d;
+  }
+}
+
+document.querySelectorAll(".mode-btn").forEach((btn) => {
+  btn.addEventListener("click", () => setMode(btn.dataset.mode));
 });
 
 // Keep end date >= start date
@@ -56,19 +94,14 @@ parseBtn.addEventListener("click", async () => {
     const e = response.parsed;
     titleInput.value = e.summary  || "";
     locInput.value   = e.location || "";
-    descInput.value  = e.description || "";
+    descInput.value  = text; // original text the user typed, not the parsed description
 
     if (e.allDay) {
-      alldayCheck.checked        = true;
-      timedFields.style.display  = "none";
-      alldayFields.style.display = "";
+      setMode("allday");
       startdateInput.value = e.start.date;
-      // Show the same date as end (API end is exclusive; we add 1 day on submit)
       enddateInput.value   = e.start.date;
     } else {
-      alldayCheck.checked        = false;
-      timedFields.style.display  = "";
-      alldayFields.style.display = "none";
+      setMode("timed");
       dtInput.value  = toDatetimeLocal(new Date(e.start.dateTime));
       const startMs  = new Date(e.start.dateTime).getTime();
       const endMs    = new Date(e.end.dateTime).getTime();
@@ -83,17 +116,50 @@ parseBtn.addEventListener("click", async () => {
 
 createBtn.addEventListener("click", async () => {
   const title    = titleInput.value.trim();
-  const isAllDay = alldayCheck.checked;
+  const isAllDay = currentMode === "allday";
 
-  if (!title)                          { showStatus("Please enter a title", "error");       return; }
-  if (isAllDay && !startdateInput.value) { showStatus("Please pick a start date", "error"); return; }
-  if (!isAllDay && !dtInput.value)     { showStatus("Please pick a date & time", "error"); return; }
+  if (!title) { showStatus("Please enter a title", "error"); return; }
+  if (currentMode === "allday"  && !startdateInput.value) { showStatus("Please pick a start date", "error");  return; }
+  if (currentMode === "timed"   && !dtInput.value)        { showStatus("Please pick a date & time", "error"); return; }
+  if (currentMode === "task"    && !taskDateInput.value)  { showStatus("Please pick a due date", "error");    return; }
 
+  createBtn.disabled = true;
+  openBtn.style.display = "none";
+
+  if (currentMode === "task") {
+    const due = taskTimeInput.value
+      ? new Date(`${taskDateInput.value}T${taskTimeInput.value}:00`).toISOString()
+      : new Date(`${taskDateInput.value}T00:00:00`).toISOString();
+
+    const task = {
+      title,
+      notes: descInput.value.trim() || undefined,
+      due,
+    };
+
+    showStatus("Creating task…", "");
+    const response = await sendMessage({ type: "CREATE_TASK", task });
+    createBtn.disabled = false;
+
+    if (response?.success) {
+      showStatus("✓ Task created!", "success");
+      const dismissTimer = setTimeout(() => window.close(), 3000);
+      openBtn.style.display = "";
+      openBtn.textContent = "Open Tasks ↗";
+      openBtn.onclick = () => {
+        clearTimeout(dismissTimer);
+        chrome.tabs.create({ url: "https://calendar.google.com/calendar/r/tasks" });
+        window.close();
+      };
+    } else {
+      showStatus("Error: " + (response?.error || "unknown"), "error");
+    }
+    return;
+  }
+
+  // Calendar event (timed or all-day)
   let event;
-
   if (isAllDay) {
-    // Google Calendar all-day events use { date: "YYYY-MM-DD" }.
-    // end.date is exclusive, so add 1 day past whatever the user picked.
     const endDate = addDays(enddateInput.value || startdateInput.value, 1);
     event = {
       summary:     title,
@@ -116,22 +182,17 @@ createBtn.addEventListener("click", async () => {
     };
   }
 
-  createBtn.disabled = true;
-  openBtn.style.display = "none";
   showStatus("Creating event…", "");
-
   const response = await sendMessage({ type: "CREATE_EVENT", event });
-
   createBtn.disabled = false;
 
   if (response?.success) {
     showStatus("✓ Event created!", "success");
-
     const dismissTimer = setTimeout(() => window.close(), 3000);
-
     const htmlLink = response.result?.htmlLink;
     if (htmlLink) {
       openBtn.style.display = "";
+      openBtn.textContent = "Open in Calendar ↗";
       openBtn.onclick = () => {
         clearTimeout(dismissTimer);
         chrome.tabs.create({ url: htmlLink });

@@ -28,6 +28,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
 
+  if (message.type === "CREATE_TASK") {
+    createTask(message.task)
+      .then((result) => sendResponse({ success: true, result }))
+      .catch((err) => sendResponse({ success: false, error: err.message }));
+    return true;
+  }
+
   if (message.type === "OPEN_URL") {
     chrome.tabs.create({ url: message.url });
   }
@@ -58,6 +65,26 @@ async function getAuthToken() {
       }
     });
   });
+}
+
+async function createTask(task) {
+  const token = await getAuthToken();
+  const response = await fetch(
+    "https://tasks.googleapis.com/tasks/v1/lists/@default/tasks",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(task),
+    }
+  );
+  if (!response.ok) {
+    const err = await response.json();
+    throw new Error(err.error?.message || "Failed to create task");
+  }
+  return response.json();
 }
 
 async function createCalendarEvent(event) {

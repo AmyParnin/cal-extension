@@ -67,25 +67,42 @@
 
     hr { margin: 14px 0; border: none; border-top: 1px solid #f1f3f4; }
 
-    .allday-row {
+    .mode-selector {
       display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-top: 10px;
+      border: 1px solid #dadce0;
+      border-radius: 8px;
+      overflow: hidden;
+      margin-top: 12px;
     }
 
-    .allday-row input[type="checkbox"] {
-      width: auto;
-      padding: 0;
-      margin: 0;
+    .mode-btn {
+      flex: 1;
+      padding: 7px 4px;
+      background: #fff;
+      border: none;
+      border-right: 1px solid #dadce0;
       cursor: pointer;
+      font-size: 12px;
+      color: #5f6368;
+      font-family: inherit;
+      transition: background 0.1s;
     }
 
-    .allday-row label {
-      margin: 0;
-      font-size: 13px;
-      color: #202124;
-      cursor: pointer;
+    .mode-btn:last-child { border-right: none; }
+
+    .mode-btn:hover:not(.active) { background: #f1f3f4; }
+
+    .mode-btn.active {
+      background: #fde8e6;
+      color: #c0394b;
+      font-weight: 600;
+    }
+
+    .mode-label {
+      font-size: 11px;
+      color: #5f6368;
+      margin-top: 8px;
+      margin-bottom: 2px;
     }
 
     #create-btn {
@@ -149,10 +166,12 @@
   <label for="title">Title</label>
   <input id="title" type="text" placeholder="Event title" />
 
-  <!-- All-day toggle -->
-  <div class="allday-row">
-    <input id="allday" type="checkbox" />
-    <label for="allday">All-day event</label>
+  <!-- Event type selector -->
+  <p class="mode-label">Type</p>
+  <div class="mode-selector" role="group" aria-label="Event type">
+    <button class="mode-btn active" id="mode-timed"  data-mode="timed">⏰ Timed event</button>
+    <button class="mode-btn"        id="mode-allday" data-mode="allday">📅 All-day</button>
+    <button class="mode-btn"        id="mode-task"   data-mode="task">✓ Task</button>
   </div>
 
   <!-- Timed event fields -->
@@ -164,7 +183,7 @@
     <input id="duration" type="number" value="60" min="5" step="5" />
   </div>
 
-  <!-- All-day event fields (hidden until checkbox is checked) -->
+  <!-- All-day event fields -->
   <div id="allday-fields" style="display:none">
     <label for="startdate">Start Date</label>
     <input id="startdate" type="date" />
@@ -173,11 +192,23 @@
     <input id="enddate" type="date" />
   </div>
 
-  <label for="location">Location (optional)</label>
-  <input id="location" type="text" placeholder="Address or video link" />
+  <!-- Task fields -->
+  <div id="task-fields" style="display:none">
+    <label for="task-date">Due date</label>
+    <input id="task-date" type="date" />
+
+    <label for="task-time">Due time (optional)</label>
+    <input id="task-time" type="time" placeholder="Leave blank for all-day task" />
+  </div>
+
+  <!-- Location hidden for tasks (Tasks API has no location field) -->
+  <div id="location-row">
+    <label for="location">Location (optional)</label>
+    <input id="location" type="text" placeholder="Address or video link" />
+  </div>
 
   <label for="description">Notes (optional)</label>
-  <input id="description" type="text" placeholder="Extra details" />
+  <textarea id="description" rows="3" placeholder="Extra details"></textarea>
 
   <button id="create-btn">Add to Google Calendar</button>
 
