@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Smart Calendar",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Create Google Calendar events from any webpage — select text or describe your event in plain English.",
   "homepage_url": "https://github.com/AmyParnin/cal-extension",
 
@@ -13,7 +13,8 @@
 
   "host_permissions": [
     "https://www.googleapis.com/*",
-    "https://tasks.googleapis.com/*"
+    "https://tasks.googleapis.com/*",
+    "https://api.anthropic.com/*"
   ],
 
   "background": {

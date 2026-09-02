@@ -2,11 +2,18 @@
 // Handles: showing the event preview bubble after right-click → "Create Calendar event"
 
 let previewBubble = null;
+let savedSelectionText = "";
+
+// Save the selection the moment the user right-clicks — the selection is
+// guaranteed to still be active here, before Chrome clears it on menu close.
+document.addEventListener("contextmenu", () => {
+  savedSelectionText = getSelectionAsText();
+});
 
 chrome.runtime.onMessage.addListener((message) => {
   if (message.type === "SHOW_EVENT_PREVIEW") {
-    // Capture selection HTML now, while it's still active, before the async parse
-    const notesText = getSelectionAsText();
+    const notesText = savedSelectionText;
+    savedSelectionText = "";
     showPreviewBubble(message.text, message.pageUrl, message.pageTitle, notesText);
   }
 });
@@ -25,6 +32,15 @@ function showPreviewBubble(text, pageUrl, pageTitle, notesText) {
 
     previewBubble = createBubble(event, notesText);
     document.body.appendChild(previewBubble);
+
+    if (event.aiError) {
+      const errEl = previewBubble.querySelector("#sc-ai-error");
+      const msgEl = previewBubble.querySelector("#sc-ai-error-msg");
+      if (errEl && msgEl) {
+        msgEl.textContent = event.aiError + " · Using built-in title.";
+        errEl.style.display = "";
+      }
+    }
   });
 }
 
@@ -54,7 +70,7 @@ function createBubble(event, notesText) {
   const dateVal     = isAllDay ? event.start.date : "";
 
   const initialMode = isAllDay ? "allday" : "timed";
-  const modeStyle = (m) => `flex:1;padding:6px 4px;border:none;border-right:1px solid #dadce0;cursor:pointer;font-size:12px;font-family:inherit;transition:background 0.1s;`;
+  const modeStyle = (m) => `flex:1;padding:6px 4px;border:none;border-right:1px solid #dadce0;cursor:pointer;font-size:12px;font-family:inherit;white-space:nowrap;transition:background 0.1s;`;
   const activeStyle = `background:#fde8e6;color:#c0394b;font-weight:600;`;
   const inactiveStyle = `background:#fff;color:#5f6368;`;
 
@@ -63,7 +79,10 @@ function createBubble(event, notesText) {
 
     <label style="display:block;margin-bottom:4px;font-size:12px;color:#5f6368">Title</label>
     <input id="sc-title" value="${escHtml(event.summary)}"
-      style="width:100%;box-sizing:border-box;padding:6px 8px;border:1px solid #dadce0;border-radius:6px;font-size:14px;margin-bottom:10px">
+      style="width:100%;box-sizing:border-box;padding:6px 8px;border:1px solid #dadce0;border-radius:6px;font-size:14px;margin-bottom:6px">
+    <div id="sc-ai-error" style="display:none;font-size:11px;color:#d93025;margin-bottom:8px;line-height:1.5">
+      ⚠ <span id="sc-ai-error-msg"></span>
+    </div>
 
     <p style="font-size:11px;color:#5f6368;margin-bottom:4px">Type</p>
     <div style="display:flex;border:1px solid #dadce0;border-radius:8px;overflow:hidden;margin-bottom:10px">

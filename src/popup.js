@@ -18,6 +18,15 @@ const descInput      = document.getElementById("description");
 const createBtn      = document.getElementById("create-btn");
 const statusEl       = document.getElementById("status");
 const openBtn        = document.getElementById("open-btn");
+const settingsToggle = document.getElementById("settings-toggle");
+const settingsPanel  = document.getElementById("settings-panel");
+const apiKeyInput    = document.getElementById("api-key-input");
+const workspaceInput = document.getElementById("workspace-id-input");
+const saveKeyBtn     = document.getElementById("save-key-btn");
+const clearKeyBtn    = document.getElementById("clear-key-btn");
+const keyInfoBtn     = document.getElementById("key-info-btn");
+const keyInfoEl      = document.getElementById("key-info");
+const keyStatus      = document.getElementById("key-status");
 
 // ─── Mode Selector ────────────────────────────────────────────────────────────
 
@@ -69,6 +78,52 @@ document.querySelectorAll(".mode-btn").forEach((btn) => {
   btn.addEventListener("click", () => setMode(btn.dataset.mode));
 });
 
+// ─── Settings Panel ───────────────────────────────────────────────────────────
+
+// Load saved key + workspace ID on open
+chrome.storage.local.get(["apiKey", "workspaceId"], ({ apiKey, workspaceId }) => {
+  if (apiKey) {
+    apiKeyInput.value         = apiKey;
+    keyStatus.textContent     = "✓ Key saved — AI titles enabled";
+    keyStatus.style.color     = "#1e8e3e";
+    clearKeyBtn.style.display = "";
+  }
+  if (workspaceId) workspaceInput.value = workspaceId;
+});
+
+settingsToggle.addEventListener("click", () => {
+  const open = settingsPanel.style.display !== "block";
+  settingsPanel.style.display = open ? "block" : "none";
+});
+
+keyInfoBtn.addEventListener("click", () => {
+  keyInfoEl.style.display = keyInfoEl.style.display === "none" ? "block" : "none";
+});
+
+saveKeyBtn.addEventListener("click", () => {
+  const key         = apiKeyInput.value.trim();
+  const workspaceId = workspaceInput.value.trim();
+  if (!key) return;
+  const data = { apiKey: key };
+  if (workspaceId) data.workspaceId = workspaceId;
+  else chrome.storage.local.remove("workspaceId");
+  chrome.storage.local.set(data, () => {
+    keyStatus.textContent     = "✓ Key saved — AI titles enabled";
+    keyStatus.style.color     = "#1e8e3e";
+    clearKeyBtn.style.display = "";
+  });
+});
+
+clearKeyBtn.addEventListener("click", () => {
+  chrome.storage.local.remove(["apiKey", "workspaceId"], () => {
+    apiKeyInput.value         = "";
+    workspaceInput.value      = "";
+    keyStatus.textContent     = "Key removed — using built-in parser";
+    keyStatus.style.color     = "#5f6368";
+    clearKeyBtn.style.display = "none";
+  });
+});
+
 // Keep end date >= start date
 startdateInput.addEventListener("change", () => {
   if (!enddateInput.value || enddateInput.value < startdateInput.value) {
@@ -78,12 +133,16 @@ startdateInput.addEventListener("change", () => {
 
 // ─── AI Parse ────────────────────────────────────────────────────────────────
 
+const aiErrorEl  = document.getElementById("ai-error");
+const aiErrorMsg = document.getElementById("ai-error-msg");
+
 parseBtn.addEventListener("click", async () => {
   const text = nlInput.value.trim();
   if (!text) return;
 
   parseBtn.disabled = true;
   parseBtn.textContent = "Parsing…";
+  aiErrorEl.style.display = "none";
 
   const response = await sendMessage({ type: "PARSE_TEXT", text });
 
@@ -95,6 +154,11 @@ parseBtn.addEventListener("click", async () => {
     titleInput.value = e.summary  || "";
     locInput.value   = e.location || "";
     descInput.value  = text; // original text the user typed, not the parsed description
+
+    if (e.aiError) {
+      aiErrorMsg.textContent = e.aiError + " · Using built-in title.";
+      aiErrorEl.style.display = "";
+    }
 
     if (e.allDay) {
       setMode("allday");

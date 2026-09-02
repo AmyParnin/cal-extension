@@ -110,14 +110,87 @@ async function createCalendarEvent(event) {
   return response.json();
 }
 
-// ─── AI Text Parsing ──────────────────────────────────────────────────────────
-// TODO: Replace with a real AI call (Claude API, OpenAI, etc.)
-// For now, this is a heuristic parser so you can test the full flow.
+// ─── Title Generation ─────────────────────────────────────────────────────────
+
+// Returns { title: string, error: string|null }
+// error is non-null only when an API key is set but the call failed.
+async function generateEventTitle(text) {
+  const { apiKey } = await chrome.storage.local.get("apiKey");
+
+  if (!apiKey) {
+    return { title: heuristicTitle(text), error: null };
+  }
+
+  try {
+    console.log("[SmartCal] Calling Claude API for title...");
+    const { workspaceId } = await chrome.storage.local.get("workspaceId");
+    const headers = {
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+      "content-type": "application/json",
+      "anthropic-dangerous-direct-browser-access": "true",
+    };
+    if (workspaceId) headers["anthropic-workspace-id"] = workspaceId;
+
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 40,
+        messages: [{
+          role: "user",
+          content: `Extract the calendar event name from this text. Return ONLY the event name — no date, no time, no location, no platform (e.g. "via Google Meet"), no punctuation at the end. Max 60 characters.\n\nText: ${text}`,
+        }],
+      }),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      const title = data.content?.[0]?.text?.trim();
+      if (title) {
+        console.log("[SmartCal] AI title:", title);
+        return { title, error: null };
+      }
+      return { title: heuristicTitle(text), error: null };
+    } else {
+      const err = await res.json().catch(() => ({}));
+      const errMsg = err?.error?.message || `HTTP ${res.status}`;
+      console.error("[SmartCal] Claude API error:", res.status, errMsg);
+      return { title: heuristicTitle(text), error: errMsg };
+    }
+  } catch (e) {
+    console.error("[SmartCal] Claude API fetch failed:", e.message);
+    return { title: heuristicTitle(text), error: e.message };
+  }
+}
+
+function heuristicTitle(text) {
+  const cleaned = text
+    .replace(/\([\s\S]*?\)/g, "")                                           // remove parentheticals like (5:30 PM)
+    .replace(/\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b\.?\s+\d{1,2}(?:st|nd|rd|th)?(?:[,\s]+\d{4})?/gi, "")
+    .replace(/\b\d{1,2}\/\d{1,2}(?:\/\d{2,4})?\b/g, "")                   // MM/DD or MM/DD/YYYY
+    .replace(/\b\d{4}-\d{2}-\d{2}\b/g, "")                                 // YYYY-MM-DD
+    .replace(/\b\d{1,2}:\d{2}\s*(?:am|pm)?\b/gi, "")                       // times with optional am/pm
+    .replace(/\b\d{1,2}\s*(?:am|pm)\b/gi, "")                              // bare am/pm times
+    .replace(/\b(today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/gi, "")
+    .replace(/\b(sun|mon|tue|wed|thu|fri|sat),?/gi, "")                    // abbreviated weekdays + optional comma
+    .replace(/\bvia\s+\S+(?:\s+\S+)?/gi, "")                               // "via Zoom", "via Google Meet" etc.
+    .replace(/[\n\r]+/g, " ")
+    .replace(/\b(at|by|from)\s*$/i, "")                                    // dangling prepositions left after stripping time/day
+    .replace(/^[\s:,–\-–—]+/, "").replace(/[\s:,.\-–—]+$/, "")            // leading/trailing separators incl em-dash
+    .replace(/\s+/g, " ")
+    .trim();
+  const result = cleaned.length > 0 ? cleaned : text.trim();
+  return result.length > 80 ? result.slice(0, 77) + "…" : result;
+}
+
+// ─── Event Parsing ────────────────────────────────────────────────────────────
 
 async function parseEventFromText(text) {
   const { date, hasTime } = extractDateInfo(text);
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const summary = text.length > 60 ? text.slice(0, 57) + "…" : text;
+  const { title: summary, error: aiError } = await generateEventTitle(text);
 
   if (!hasTime) {
     // No time found → treat as all-day event.
@@ -130,6 +203,7 @@ async function parseEventFromText(text) {
       end:   { date: toDateString(nextDay) },
       description: `Created from: ${text}`,
       allDay: true,
+      aiError: aiError || null,
     };
   }
 
@@ -140,6 +214,7 @@ async function parseEventFromText(text) {
     end:   { dateTime: endDate.toISOString(), timeZone: tz },
     description: `Created from: ${text}`,
     allDay: false,
+    aiError: aiError || null,
   };
 }
 
@@ -268,5 +343,5 @@ function toDateString(date) {
 
 // Allow unit testing in Node without the Chrome runtime
 if (typeof module !== "undefined") {
-  module.exports = { extractDateInfo, parseEventFromText };
+  module.exports = { extractDateInfo, parseEventFromText, heuristicTitle };
 }

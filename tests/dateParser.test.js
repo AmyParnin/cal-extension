@@ -4,9 +4,10 @@ global.chrome = {
   contextMenus: { create: () => {},                       onClicked:  { addListener: () => {} } },
   tabs:         { sendMessage: () => {},                  create:     () => {} },
   identity:     { getAuthToken: () => {} },
+  storage:      { local: { get: () => Promise.resolve({}), set: () => Promise.resolve(), remove: () => Promise.resolve() } },
 };
 
-const { extractDateInfo } = require("../src/background.js");
+const { extractDateInfo, heuristicTitle, parseEventFromText } = require("../src/background.js");
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -332,5 +333,94 @@ describe("Fallback behaviour", () => {
     expect(ymd(date)).toBe(relativeDate(1));
     expect(hhmm(date)).toBe("15:00");
     expect(hasTime).toBe(true);
+  });
+});
+
+// ── Heuristic title (no-API-key fallback) ─────────────────────────────────────
+// These cover the title generation used in all 3 modes × 2 surfaces.
+
+describe("heuristicTitle — timed event text", () => {
+  test("strips date, time in parens, and via-platform suffix", () => {
+    expect(heuristicTitle("Sept 3, 2026 (5:30 PM): Virtual Parent Info Meeting via Google Meet."))
+      .toBe("Virtual Parent Info Meeting");
+  });
+
+  test("strips time-only prefix from flight itinerary", () => {
+    expect(heuristicTitle("Thu, Oct 1, 2026 10:45 PM — SFO Arrival"))
+      .toBe("SFO Arrival");
+  });
+
+  test("strips leading date and colon, keeps title", () => {
+    expect(heuristicTitle("Friday, December 25, 2026: Christmas Day Lunch"))
+      .toBe("Christmas Day Lunch");
+  });
+
+  test("strips 'via Zoom' (one-word platform)", () => {
+    expect(heuristicTitle("Team Standup Monday at 9am via Zoom"))
+      .toBe("Team Standup");
+  });
+
+  test("strips 'via Microsoft Teams' (two-word platform)", () => {
+    expect(heuristicTitle("Sprint Review Friday at 2pm via Microsoft Teams"))
+      .toBe("Sprint Review");
+  });
+});
+
+describe("heuristicTitle — all-day event text", () => {
+  test("school newsletter deadline", () => {
+    expect(heuristicTitle("Sept 15, 2026: Parent Chaperone Interest Form & MyVolunteer Clearance Deadline."))
+      .toBe("Parent Chaperone Interest Form & MyVolunteer Clearance Deadline");
+  });
+
+  test("holiday with full date prefix", () => {
+    expect(heuristicTitle("Monday, January 1st, 2027 — New Year's Day"))
+      .toBe("New Year's Day");
+  });
+
+  test("ISO date prefix stripped", () => {
+    expect(heuristicTitle("2026-12-25 Christmas Holiday"))
+      .toBe("Christmas Holiday");
+  });
+});
+
+describe("heuristicTitle — task-style text", () => {
+  test("deadline sentence", () => {
+    expect(heuristicTitle("Submit expense report by Friday"))
+      .toBe("Submit expense report");
+  });
+
+  test("reminder with tomorrow", () => {
+    expect(heuristicTitle("Call dentist tomorrow"))
+      .toBe("Call dentist");
+  });
+
+  test("plain title with no date at all is returned unchanged", () => {
+    expect(heuristicTitle("Team offsite planning"))
+      .toBe("Team offsite planning");
+  });
+});
+
+describe("parseEventFromText — structure for all modes (no API key)", () => {
+  test("timed event returns allDay:false with dateTime fields", async () => {
+    const result = await parseEventFromText("Team standup Monday at 9am");
+    expect(result.allDay).toBe(false);
+    expect(result.start.dateTime).toBeDefined();
+    expect(result.end.dateTime).toBeDefined();
+    expect(result.summary).toBeTruthy();
+  });
+
+  test("all-day event returns allDay:true with date fields", async () => {
+    const result = await parseEventFromText("Sept 15, 2026: School picnic");
+    expect(result.allDay).toBe(true);
+    expect(result.start.date).toBe("2026-09-15");
+    expect(result.end.date).toBe("2026-09-16"); // exclusive end
+    expect(result.summary).toBeTruthy();
+  });
+
+  test("task text still parses to a valid event structure (task logic is in popup/content)", async () => {
+    const result = await parseEventFromText("Submit report by Friday at noon");
+    expect(result.summary).toBeTruthy();
+    expect(result.start).toBeDefined();
+    expect(result.end).toBeDefined();
   });
 });
