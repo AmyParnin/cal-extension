@@ -32,7 +32,7 @@
       margin-top: 10px;
     }
 
-    input, textarea {
+    input, textarea, #description {
       width: 100%;
       padding: 8px 10px;
       border: 1px solid #dadce0;
@@ -44,6 +44,27 @@
     textarea {
       height: 72px;
       resize: vertical;
+    }
+
+    #description {
+      min-height: 72px;
+      max-height: 180px;
+      overflow-y: auto;
+      line-height: 1.5;
+      cursor: text;
+      color: #202124;
+    }
+
+    #description:focus {
+      outline: none;
+      border-color: #1a73e8;
+    }
+
+    #description:empty::before {
+      content: attr(data-placeholder);
+      color: #9aa0a6;
+      pointer-events: none;
+      display: block;
     }
 
     #ai-hint {
@@ -249,7 +270,7 @@
   </div>
 
   <label for="description">Notes (optional)</label>
-  <textarea id="description" rows="3" placeholder="Extra details"></textarea>
+  <div id="description" contenteditable="true" data-placeholder="Extra details"></div>
 
   <button id="create-btn">Add to Google Calendar</button>
 

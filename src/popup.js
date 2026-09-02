@@ -153,7 +153,7 @@ parseBtn.addEventListener("click", async () => {
     const e = response.parsed;
     titleInput.value = e.summary  || "";
     locInput.value   = e.location || "";
-    descInput.value  = text; // original text the user typed, not the parsed description
+    descInput.textContent = text; // original text the user typed, not the parsed description
 
     if (e.aiError) {
       aiErrorMsg.textContent = e.aiError + " · Using built-in title.";
@@ -197,7 +197,7 @@ createBtn.addEventListener("click", async () => {
 
     const task = {
       title,
-      notes: descInput.value.trim() || undefined,
+      notes: getDescriptionValue() || undefined,
       due,
     };
 
@@ -228,7 +228,7 @@ createBtn.addEventListener("click", async () => {
     event = {
       summary:     title,
       location:    locInput.value.trim()  || undefined,
-      description: descInput.value.trim() || undefined,
+      description: getDescriptionHtml() || undefined,
       start: { date: startdateInput.value },
       end:   { date: endDate },
     };
@@ -240,7 +240,7 @@ createBtn.addEventListener("click", async () => {
     event = {
       summary:     title,
       location:    locInput.value.trim()  || undefined,
-      description: descInput.value.trim() || undefined,
+      description: getDescriptionHtml() || undefined,
       start: { dateTime: start.toISOString(), timeZone: tz },
       end:   { dateTime: end.toISOString(),   timeZone: tz },
     };
@@ -269,6 +269,30 @@ createBtn.addEventListener("click", async () => {
 });
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+// Returns the Notes field as HTML for the Google Calendar description field,
+// which renders HTML including clickable links in the event view.
+// Strips unsafe elements before sending.
+function getDescriptionHtml() {
+  const clone = descInput.cloneNode(true);
+  clone.querySelectorAll("script, style, meta").forEach((n) => n.remove());
+  return clone.innerHTML.trim();
+}
+
+// Returns Notes as plain text with links as "text (url)".
+// Used for Google Tasks notes (Tasks API is plain text only).
+function getDescriptionValue() {
+  const clone = descInput.cloneNode(true);
+  clone.querySelectorAll("br").forEach((br) => br.replaceWith("\n"));
+  clone.querySelectorAll("p, div").forEach((b) => { if (b.nextSibling) b.after("\n"); });
+  clone.querySelectorAll("a[href]").forEach((a) => {
+    const href = a.href || a.getAttribute("href") || "";
+    const linkText = a.textContent.trim();
+    const text = linkText && linkText !== href ? `${linkText} (${href})` : href;
+    if (text) a.replaceWith(text);
+  });
+  return clone.textContent.replace(/\n{3,}/g, "\n\n").trim();
+}
 
 function sendMessage(msg) {
   return new Promise((resolve) => chrome.runtime.sendMessage(msg, resolve));

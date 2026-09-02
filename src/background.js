@@ -140,18 +140,28 @@ async function generateEventTitle(text) {
         max_tokens: 40,
         messages: [{
           role: "user",
-          content: `Extract the calendar event name from this text. Return ONLY the event name — no date, no time, no location, no platform (e.g. "via Google Meet"), no punctuation at the end. Max 60 characters.\n\nText: ${text}`,
+          content: `Create a short calendar event title for the text below. Rules:
+- If the text mentions a specific event (meeting, deadline, appointment, sale, class, etc.), use that as the title
+- If not, summarize the main topic into a concise 2–5 word title
+- Strip dates, times, locations, and platform names (e.g. "via Zoom")
+- Return ONLY the title — never explain, never say you can't find an event
+- No punctuation at the end, max 60 characters
+
+Text: ${text}`,
         }],
       }),
     });
 
     if (res.ok) {
       const data = await res.json();
-      const title = data.content?.[0]?.text?.trim();
-      if (title) {
-        console.log("[SmartCal] AI title:", title);
-        return { title, error: null };
+      const raw = data.content?.[0]?.text?.trim();
+      // If the model returned prose instead of a title, fall back silently
+      const looksLikeProse = !raw || raw.length > 80 || /\.\s+[A-Z]/.test(raw) || raw.split(" ").length > 10;
+      if (raw && !looksLikeProse) {
+        console.log("[SmartCal] AI title:", raw);
+        return { title: raw, error: null };
       }
+      console.log("[SmartCal] AI response not usable as title, using heuristic");
       return { title: heuristicTitle(text), error: null };
     } else {
       const err = await res.json().catch(() => ({}));

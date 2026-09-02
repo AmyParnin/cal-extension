@@ -4,15 +4,16 @@
 let previewBubble = null;
 let savedSelectionText = "";
 
-// Save the selection the moment the user right-clicks — the selection is
-// guaranteed to still be active here, before Chrome clears it on menu close.
+// Capture phase (true) fires before any page handler can call stopPropagation,
+// ensuring we always capture the selection when the context menu opens.
 document.addEventListener("contextmenu", () => {
   savedSelectionText = getSelectionAsText();
-});
+}, true);
 
 chrome.runtime.onMessage.addListener((message) => {
   if (message.type === "SHOW_EVENT_PREVIEW") {
-    const notesText = savedSelectionText;
+    // Fall back to Chrome's plain selectionText if our capture returned empty
+    const notesText = savedSelectionText || message.text;
     savedSelectionText = "";
     showPreviewBubble(message.text, message.pageUrl, message.pageTitle, notesText);
   }
@@ -119,8 +120,8 @@ function createBubble(event, notesText) {
     </div>
 
     <label style="display:block;margin-bottom:4px;font-size:12px;color:#5f6368">Notes</label>
-    <textarea id="sc-description" rows="3"
-      style="width:100%;box-sizing:border-box;padding:6px 8px;border:1px solid #dadce0;border-radius:6px;font-size:13px;font-family:inherit;resize:vertical;margin-bottom:10px"></textarea>
+    <div id="sc-description" contenteditable="true"
+      style="width:100%;box-sizing:border-box;min-height:60px;max-height:150px;overflow-y:auto;padding:6px 8px;border:1px solid #dadce0;border-radius:6px;font-size:13px;font-family:inherit;line-height:1.5;margin-bottom:10px;cursor:text;word-break:break-word;color:#202124;outline:none"></div>
 
     <div style="display:flex;gap:8px">
       <button id="sc-confirm"
@@ -142,9 +143,13 @@ function createBubble(event, notesText) {
     </div>
   `;
 
-  // ── Pre-fill notes with selected text (set via .value, not innerHTML, for safety)
+  // ── Pre-fill notes with selected text
   const descEl = bubble.querySelector("#sc-description");
-  descEl.value = notesText || "";
+  if (notesText) descEl.textContent = notesText;
+
+  // Highlight border on focus (can't use :focus CSS in inline-styled injected element)
+  descEl.addEventListener("focus", () => { descEl.style.borderColor = "#1a73e8"; });
+  descEl.addEventListener("blur",  () => { descEl.style.borderColor = "#dadce0"; });
 
   // ── Mode selector ─────────────────────────────────────────────────────────────
   const timedDiv     = bubble.querySelector("#sc-timed");
@@ -202,8 +207,9 @@ function createBubble(event, notesText) {
 
   // ── Confirm / create ─────────────────────────────────────────────────────────
   bubble.querySelector("#sc-confirm").addEventListener("click", () => {
-    const title       = bubble.querySelector("#sc-title").value.trim();
-    const description = descEl.value.trim() || undefined;
+    const title           = bubble.querySelector("#sc-title").value.trim();
+    const descriptionHtml = getDescriptionHtml(descEl) || undefined;
+    const descriptionText = getDescriptionValue(descEl) || undefined;
     const statusEl    = bubble.querySelector("#sc-status");
     const openBtnEl   = bubble.querySelector("#sc-open");
     const tz          = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -217,7 +223,7 @@ function createBubble(event, notesText) {
 
       const task = {
         title,
-        notes: description,
+        notes: descriptionText,
         due,
       };
 
@@ -250,7 +256,7 @@ function createBubble(event, notesText) {
       finalEvent = {
         ...event,
         summary: title,
-        description,
+        description: descriptionHtml,
         start: { date: startDate },
         end:   { date: endDate },
       };
@@ -261,7 +267,7 @@ function createBubble(event, notesText) {
       finalEvent = {
         ...event,
         summary: title,
-        description,
+        description: descriptionHtml,
         start: { dateTime: dt.toISOString(), timeZone: tz },
         end:   { dateTime: endDt.toISOString(), timeZone: tz },
       };
@@ -297,6 +303,27 @@ function createBubble(event, notesText) {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+// Returns Notes as HTML for Google Calendar description (renders clickable links).
+function getDescriptionHtml(el) {
+  const clone = el.cloneNode(true);
+  clone.querySelectorAll("script, style, meta").forEach((n) => n.remove());
+  return clone.innerHTML.trim();
+}
+
+// Returns Notes as plain text with links as "text (url)" for Google Tasks.
+function getDescriptionValue(el) {
+  const clone = el.cloneNode(true);
+  clone.querySelectorAll("br").forEach((br) => br.replaceWith("\n"));
+  clone.querySelectorAll("p, div").forEach((b) => { if (b.nextSibling) b.after("\n"); });
+  clone.querySelectorAll("a[href]").forEach((a) => {
+    const href = a.href || a.getAttribute("href") || "";
+    const linkText = a.textContent.trim();
+    const text = linkText && linkText !== href ? `${linkText} (${href})` : href;
+    if (text) a.replaceWith(text);
+  });
+  return clone.textContent.replace(/\n{3,}/g, "\n\n").trim();
+}
+
 function escHtml(str) {
   return str.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
 }
@@ -306,21 +333,12 @@ function toDatetimeLocal(date) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
-// Returns the current selection as plain text, converting <a> links to
-// "link text (url)" so the URL is preserved even in a plain-text notes field.
 function getSelectionAsText() {
   const selection = window.getSelection();
   if (!selection || !selection.rangeCount) return "";
-  const range = selection.getRangeAt(0);
-  const div = document.createElement("div");
-  div.appendChild(range.cloneContents());
-  div.querySelectorAll("a").forEach((a) => {
-    const href = a.href;
-    const linkText = a.textContent.trim();
-    a.replaceWith(linkText && linkText !== href ? `${linkText} (${href})` : href);
-  });
-  return div.textContent.trim();
+  return selection.getRangeAt(0).toString().trim();
 }
+
 
 // Adds `days` to a "YYYY-MM-DD" string, returns a new "YYYY-MM-DD" string.
 function addDays(dateStr, days) {
